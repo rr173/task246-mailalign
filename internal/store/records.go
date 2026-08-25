@@ -44,7 +44,10 @@ func (s *Store) SPF(ctx context.Context, domain string) (map[string]model.SPFRec
 		if err := json.Unmarshal([]byte(data), &value.Mechanisms); err != nil {
 			return nil, err
 		}
-		result[value.Domain] = value
+		// Keep the highest active version per domain so an older snapshot cannot overwrite a newer one.
+		if existing, ok := result[value.Domain]; !ok || value.Version > existing.Version {
+			result[value.Domain] = value
+		}
 	}
 	return result, rows.Err()
 }
@@ -75,7 +78,11 @@ func (s *Store) DKIM(ctx context.Context) (map[string]model.DKIMRecord, error) {
 		if err := rows.Scan(&value.ID, &value.Domain, &value.Selector, &value.Version, &value.BodySHA, &value.Status); err != nil {
 			return nil, err
 		}
-		result[value.Domain+":"+value.Selector] = value
+		// Keep the highest active version per domain+selector so an older snapshot cannot overwrite a newer one.
+		key := value.Domain + ":" + value.Selector
+		if existing, ok := result[key]; !ok || value.Version > existing.Version {
+			result[key] = value
+		}
 	}
 	return result, rows.Err()
 }

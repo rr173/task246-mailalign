@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"task246-mailalign/internal/model"
@@ -16,13 +17,13 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func writeErr(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case err == model.ErrInvalidArgument:
+	case errors.Is(err, model.ErrInvalidArgument):
 		status = http.StatusBadRequest
-	case err == model.ErrNotFound:
+	case errors.Is(err, model.ErrNotFound):
 		status = http.StatusNotFound
-	case err == model.ErrConflict:
+	case errors.Is(err, model.ErrConflict):
 		status = http.StatusConflict
-	case err == model.ErrInvalidState || err == model.ErrImmutable:
+	case errors.Is(err, model.ErrInvalidState), errors.Is(err, model.ErrImmutable):
 		status = http.StatusUnprocessableEntity
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})

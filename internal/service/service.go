@@ -73,6 +73,17 @@ func (s *Service) AddHop(ctx context.Context, value model.Hop) (*model.Hop, erro
 	if value.ByDomain, err = domain.Normalize(value.ByDomain); err != nil {
 		return nil, model.ErrInvalidArgument
 	}
+	// Reject any hop whose sequence would create a gap in the Received chain.
+	// Hops are recorded one at a time, so the new sequence must extend the
+	// existing chain by exactly one position; otherwise the persisted chain
+	// would be discontinuous and must not be saved.
+	existing, err := s.store.Hops(ctx, value.SampleID)
+	if err != nil {
+		return nil, err
+	}
+	if value.Sequence != len(existing)+1 {
+		return nil, model.ErrInvalidArgument
+	}
 	value.Status = model.HopObserved
 	return s.store.AddHop(ctx, &value)
 }

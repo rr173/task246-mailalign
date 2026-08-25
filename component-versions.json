@@ -1,0 +1,11 @@
+{
+  "go": "1.26.3",
+  "module": "task246-mailalign",
+  "components": {
+    "sqlite": "3.46.1"
+  },
+  "runtime": {
+    "sqlite": "3.46.1",
+    "cgo": false
+  }
+}

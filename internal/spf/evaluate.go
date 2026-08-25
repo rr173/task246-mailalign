@@ -40,6 +40,11 @@ func evaluate(records Resolver, domain, clientIP string, seen map[string]bool, d
 		return "permerror", "", nil, fmt.Errorf("SPF include loop at %s", domain)
 	}
 	seen[domain] = true
+	// Only the domains on the current recursion path constitute a loop. A
+	// forwarding domain may be referenced more than once by sibling include
+	// mechanisms in the same record; after a child evaluation returns it must
+	// be eligible for re-evaluation, so undo the visit on the way out.
+	defer delete(seen, domain)
 	record, ok := records[domain]
 	if !ok || record.Status != model.RecordActive {
 		return "none", "", []string{domain}, nil

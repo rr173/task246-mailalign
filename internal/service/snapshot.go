@@ -27,7 +27,16 @@ func (s *Service) PublishSnapshot(ctx context.Context, sampleID int64) (*model.S
 	if err != nil {
 		return nil, err
 	}
-	return s.store.PublishSnapshot(ctx, created.ID)
+	published, err := s.store.PublishSnapshot(ctx, created.ID)
+	if err != nil {
+		return nil, err
+	}
+	// A published snapshot freezes the sample: later flows must treat it as an
+	// immutable archive and can no longer mutate the sample or re-run analysis.
+	if err := s.store.UpdateSampleStatus(ctx, sampleID, model.SampleSealed); err != nil {
+		return nil, err
+	}
+	return published, nil
 }
 
 func (s *Service) Snapshot(ctx context.Context, id int64) (*model.Snapshot, error) {

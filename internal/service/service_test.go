@@ -61,3 +61,44 @@ func TestWorkflowPersistsPublishedSnapshot(t *testing.T) {
 		t.Fatalf("recovery mismatch: %+v", restored)
 	}
 }
+
+func TestPublishSnapshotSealsSample(t *testing.T) {
+	dir := t.TempDir()
+	repository, err := store.Open(filepath.Join(dir, "mail.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	svc := New(repository)
+	body := "body"
+	if _, err = svc.SaveSPF(context.Background(), model.SPFRecord{Domain: "mx.example.com", Version: 1, Mechanisms: []string{"ip4:192.0.2.0/24"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.SaveDKIM(context.Background(), model.DKIMRecord{Domain: "signed.example.com", Selector: "s1", Version: 1, BodySHA: dkim.BodySHA(body)}); err != nil {
+		t.Fatal(err)
+	}
+	sample, _, err := svc.CreateSample(context.Background(), model.MessageSample{VisibleFrom: "a@corp.example.com", ReturnPath: "b@mx.example.com", RecipientIP: "192.0.2.3", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.AddHop(context.Background(), model.Hop{SampleID: sample.ID, Sequence: 1, FromDomain: "edge.example.net", ByDomain: "mx.example.com", ClientIP: "192.0.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.Analyze(context.Background(), sample.ID, "signed.example.com", "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.PublishSnapshot(context.Background(), sample.ID); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := svc.Sample(context.Background(), sample.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sealed.Status != model.SampleSealed {
+		t.Fatalf("sample should be sealed after snapshot publish, got %s", sealed.Status)
+	}
+	// Later flows must not treat a sealed sample as mutable.
+	if _, err = svc.Analyze(context.Background(), sample.ID, "signed.example.com", "s1"); err != model.ErrImmutable {
+		t.Fatalf("re-analyzing a sealed sample should be immutable, got %v", err)
+	}
+}

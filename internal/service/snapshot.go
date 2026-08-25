@@ -27,7 +27,16 @@ func (s *Service) PublishSnapshot(ctx context.Context, sampleID int64) (*model.S
 	if err != nil {
 		return nil, err
 	}
-	return s.store.PublishSnapshot(ctx, created.ID)
+	published, err := s.store.PublishSnapshot(ctx, created.ID)
+	if err != nil {
+		return nil, err
+	}
+	// Sealing the sample freezes the Received hop chain: once an immutable
+	// diagnostic snapshot is published, hop trust status cannot be changed.
+	if err := s.store.UpdateSampleStatus(ctx, sampleID, model.SampleSealed); err != nil {
+		return nil, err
+	}
+	return published, nil
 }
 
 func (s *Service) Snapshot(ctx context.Context, id int64) (*model.Snapshot, error) {

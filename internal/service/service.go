@@ -99,7 +99,22 @@ func (s *Service) SaveDKIM(ctx context.Context, value model.DKIMRecord) (*model.
 	return s.store.SaveDKIM(ctx, &value)
 }
 
-func (s *Service) TrustHop(ctx context.Context, id int64) error { return s.store.TrustHop(ctx, id) }
+func (s *Service) TrustHop(ctx context.Context, id int64) error {
+	hop, err := s.store.Hop(ctx, id)
+	if err != nil {
+		return err
+	}
+	sample, err := s.store.Sample(ctx, hop.SampleID)
+	if err != nil {
+		return err
+	}
+	// A sample is sealed once its diagnostic snapshot has been published; the
+	// Received hop chain is then immutable, so its trust status cannot change.
+	if sample.Status == model.SampleSealed {
+		return model.ErrImmutable
+	}
+	return s.store.TrustHop(ctx, id)
+}
 
 func (s *Service) Analyze(ctx context.Context, sampleID int64, dkimDomain, selector string) (*model.Diagnostic, error) {
 	unlock := s.sampleLock(sampleID)

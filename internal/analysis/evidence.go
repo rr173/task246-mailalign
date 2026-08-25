@@ -75,13 +75,30 @@ func alignmentOutcome(result *model.Diagnostic) string {
 
 func alignmentDetail(sample model.MessageSample, result *model.Diagnostic) string {
 	from, _ := domain.MailboxDomain(sample.VisibleFrom)
-	if result.SPF.Status == "pass" {
-		return domain.AlignmentExplanation(from, result.SPF.Domain, domain.Same(from, result.SPF.Domain, false), domain.Same(from, result.SPF.Domain, true))
+	spfStrict, spfRelaxed := domain.Same(from, result.SPF.Domain, false), domain.Same(from, result.SPF.Domain, true)
+	dkimStrict, dkimRelaxed := domain.Same(from, result.DKIM.Domain, false), domain.Same(from, result.DKIM.Domain, true)
+
+	// Explain the authentication method that genuinely aligns with the visible
+	// From domain. A passing-but-unaligned SPF result must not shadow a DKIM
+	// result that actually aligns, so a passing method is only described as the
+	// alignment outcome when it is the one that aligns. Strict alignment is
+	// preferred over relaxed so the report never understates a strict match.
+	switch {
+	case result.SPF.Status == "pass" && spfStrict:
+		return domain.AlignmentExplanation(from, result.SPF.Domain, spfStrict, spfRelaxed)
+	case result.DKIM.Status == "pass" && dkimStrict:
+		return domain.AlignmentExplanation(from, result.DKIM.Domain, dkimStrict, dkimRelaxed)
+	case result.SPF.Status == "pass" && spfRelaxed:
+		return domain.AlignmentExplanation(from, result.SPF.Domain, spfStrict, spfRelaxed)
+	case result.DKIM.Status == "pass" && dkimRelaxed:
+		return domain.AlignmentExplanation(from, result.DKIM.Domain, dkimStrict, dkimRelaxed)
+	case result.SPF.Status == "pass":
+		return domain.AlignmentExplanation(from, result.SPF.Domain, spfStrict, spfRelaxed)
+	case result.DKIM.Status == "pass":
+		return domain.AlignmentExplanation(from, result.DKIM.Domain, dkimStrict, dkimRelaxed)
+	default:
+		return "no passing authentication result supplies an aligned domain"
 	}
-	if result.DKIM.Status == "pass" {
-		return domain.AlignmentExplanation(from, result.DKIM.Domain, domain.Same(from, result.DKIM.Domain, false), domain.Same(from, result.DKIM.Domain, true))
-	}
-	return "no passing authentication result supplies an aligned domain"
 }
 
 func alignmentWeight(result *model.Diagnostic) int {
